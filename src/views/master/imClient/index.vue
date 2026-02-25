@@ -39,6 +39,9 @@
         <el-table-column label="客户端api url" align="center" prop="clientApiUrl" /> -->
         <el-table-column label="操作" align="center" fixed="right"  class-name="small-padding fixed-width">
           <template #default="scope">
+            <el-tooltip content="查看配置" placement="top">
+              <el-button link type="primary" icon="Document" @click="handleViewConfig(scope.row)"></el-button>
+            </el-tooltip>
             <el-tooltip content="修改" placement="top">
               <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['master:imClient:edit']"></el-button>
             </el-tooltip>
@@ -84,11 +87,66 @@
         </div>
       </template>
     </el-dialog>
+    <!-- 查看JSON配置对话框 -->
+    <el-dialog title="客户端配置" v-model="configDialog.visible" width="800px" append-to-body>
+      <div v-loading="configDialog.loading || configDialog.saving">
+        <div v-if="configDialog.data && configDialog.data.length > 0">
+          <div v-for="(item, index) in configDialog.data" :key="index" class="config-item mb-2">
+            <el-row :gutter="10" align="middle">
+              <el-col :span="2">
+                <el-button circle size="small" icon="Delete" type="danger" @click="removeConfigItem(index)" />
+              </el-col>
+              <el-col :span="9">
+                <el-input v-model="item.key" placeholder="配置项Key" />
+              </el-col>
+              <el-col :span="11">
+                <el-input
+                  v-if="!Array.isArray(item.value)"
+                  v-model="item.value"
+                  placeholder="配置项Value"
+                />
+                <div v-else class="array-values">
+                  <div v-for="(arrItem, arrIndex) in item.value" :key="arrIndex" class="mb-1">
+                    <el-row :gutter="5">
+                      <el-col :span="20">
+                        <el-input v-model="item.value[arrIndex]" placeholder="数组项值" size="small" />
+                      </el-col>
+                      <el-col :span="4">
+                        <el-button circle size="small" icon="Delete" type="danger" @click="removeArrayItem(index, arrIndex)" />
+                      </el-col>
+                    </el-row>
+                  </div>
+                  <el-button size="small" icon="Plus" @click="addArrayItem(index)">添加数组项</el-button>
+                </div>
+              </el-col>
+              <el-col :span="2">
+                <el-button
+                  v-if="!Array.isArray(item.value)"
+                  circle
+                  size="small"
+                  icon="Top"
+                  @click="convertToArray(index)"
+                  title="转为数组"
+                />
+              </el-col>
+            </el-row>
+          </div>
+        </div>
+        <el-alert v-else title="暂无配置数据" type="info" :closable="false" />
+        <el-button class="mt-3" icon="Plus" @click="addConfigItem">新增配置项</el-button>
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="configDialog.visible = false">关 闭</el-button>
+          <el-button type="primary" :loading="configDialog.saving" @click="saveConfig">保 存</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup name="ImClient" lang="ts">
-import { listImClient, getImClient, delImClient, addImClient, updateImClient } from '@/api/master/imClient';
+import { listImClient, getImClient, delImClient, addImClient, updateImClient, getClientJson, updateAppUrl } from '@/api/master/imClient';
 import { ImClientVO, ImClientQuery, ImClientForm } from '@/api/master/imClient/types';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
@@ -108,6 +166,20 @@ const imClientFormRef = ref<ElFormInstance>();
 const dialog = reactive<DialogOption>({
   visible: false,
   title: ''
+});
+
+const configDialog = reactive<{
+  visible: boolean;
+  clientId: string | number | null;
+  data: Array<{ key: string; value: string | string[] }>;
+  loading: boolean;
+  saving: boolean;
+}>({
+  visible: false,
+  clientId: null,
+  data: [],
+  loading: false,
+  saving: false
 });
 
 const initFormData: ImClientForm = {
@@ -226,6 +298,87 @@ const handleExport = () => {
   proxy?.download('master/imClient/export', {
     ...queryParams.value
   }, `imClient_${new Date().getTime()}.xlsx`)
+}
+
+/** 查看配置操作 */
+const handleViewConfig = async (row: ImClientVO) => {
+  configDialog.clientId = row.id;
+  configDialog.visible = true;
+  configDialog.loading = true;
+  configDialog.data = [];
+  try {
+    const res = await getClientJson(row.id);
+    if (res.code === 200 && res.msg) {
+      const parsedData = JSON.parse(res.msg);
+      configDialog.data = Object.entries(parsedData).map(([key, value]) => ({ key, value }));
+    } else {
+      configDialog.data = [];
+    }
+  } catch (error) {
+    proxy?.$modal.msgError('获取配置失败');
+    configDialog.data = [];
+  } finally {
+    configDialog.loading = false;
+  }
+}
+
+/** 添加配置项 */
+const addConfigItem = () => {
+  configDialog.data.push({ key: '', value: '' });
+}
+
+/** 删除配置项 */
+const removeConfigItem = (index: number) => {
+  configDialog.data.splice(index, 1);
+}
+
+/** 转为数组 */
+const convertToArray = (index: number) => {
+  if (!Array.isArray(configDialog.data[index].value)) {
+    configDialog.data[index].value = [configDialog.data[index].value || ''];
+  }
+}
+
+/** 添加数组项 */
+const addArrayItem = (index: number) => {
+  if (Array.isArray(configDialog.data[index].value)) {
+    configDialog.data[index].value.push('');
+  }
+}
+
+/** 删除数组项 */
+const removeArrayItem = (index: number, arrIndex: number) => {
+  if (Array.isArray(configDialog.data[index].value)) {
+    configDialog.data[index].value.splice(arrIndex, 1);
+  }
+}
+
+/** 保存配置 */
+const saveConfig = async () => {
+  if (!configDialog.data || configDialog.data.length === 0) return;
+
+  await proxy?.$modal.confirm('将会同步到远程文件上是否继续操作？');
+
+  configDialog.saving = true;
+  try {
+    const requestData: Record<string, any> = {
+      clientId: configDialog.clientId
+    };
+
+    configDialog.data.forEach(({ key, value }) => {
+      if (!key) return;
+      const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+      requestData[camelKey] = value;
+    });
+
+    await updateAppUrl(requestData);
+    proxy?.$modal.msgSuccess('保存成功');
+    configDialog.visible = false;
+  } catch (error) {
+    // 用户取消或请求失败
+  } finally {
+    configDialog.saving = false;
+  }
 }
 
 onMounted(() => {

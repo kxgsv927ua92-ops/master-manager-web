@@ -61,3 +61,35 @@ export const delImClient = (id: string | number | Array<string | number>) => {
     method: 'delete'
   });
 };
+
+/**
+ * 获取客户端JSON配置
+ * @param clientId
+ */
+export const getClientJson = (clientId: string | number): AxiosPromise<{ code: number; msg: string; data: null }> => {
+  return request({
+    url: '/master/imClient/getJson',
+    method: 'get',
+    params: { clientId }
+  });
+};
+
+/**
+ * 更新客户端URL配置
+ * @param data
+ */
+export const updateAppUrl = (data: {
+  clientId: string | number;
+  urls?: string[];
+  im?: string[];
+  down?: string;
+  trcId?: string;
+  trcKey?: string;
+  [key: string]: any;
+}) => {
+  return request({
+    url: '/master/imClient/updateAppUrl',
+    method: 'post',
+    data: data
+  });
+};
