@@ -4,7 +4,7 @@
       <div v-show="showSearch" class="mb-[10px]">
         <el-card shadow="hover">
           <el-form ref="queryFormRef" :model="queryParams" :inline="true">
-            <el-form-item label="客户端名称" prop="clientName">
+            <el-form-item label="客户端名称" prop="clientName" label-width="100">
               <el-input v-model="queryParams.clientName" placeholder="请输入客户端名称" clearable @keyup.enter="handleQuery" />
             </el-form-item>
             <el-form-item>

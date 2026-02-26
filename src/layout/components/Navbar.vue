@@ -21,6 +21,20 @@
           <template #prefix><svg-icon icon-class="company" class="el-input__icon input-icon" /></template>
         </el-select>
 
+        <!-- IM平台选择器 -->
+        <el-select
+          v-model="imClientStore.selectedClientId"
+          class="im-client-select"
+          clearable
+          filterable
+          reserve-keyword
+          placeholder="选择平台"
+          @change="handleImClientChange"
+        >
+          <el-option v-for="item in imClientStore.imClientList" :key="item.id" :label="item.clientName" :value="item.id"> </el-option>
+          <template #prefix><svg-icon icon-class="company" class="el-input__icon input-icon" /></template>
+        </el-select>
+
         <search-menu ref="searchMenuRef" />
         <el-tooltip content="搜索" effect="dark" placement="bottom">
           <div class="right-menu-item hover-effect" @click="openSearchMenu">
@@ -42,13 +56,13 @@
             </el-popover>
           </div>
         </el-tooltip>
-        <el-tooltip content="Github" effect="dark" placement="bottom">
-          <ruo-yi-git id="ruoyi-git" class="right-menu-item hover-effect" />
-        </el-tooltip>
+<!--        <el-tooltip content="Github" effect="dark" placement="bottom">-->
+<!--          <ruo-yi-git id="ruoyi-git" class="right-menu-item hover-effect" />-->
+<!--        </el-tooltip>-->
 
-        <el-tooltip :content="proxy.$t('navbar.document')" effect="dark" placement="bottom">
-          <ruo-yi-doc id="ruoyi-doc" class="right-menu-item hover-effect" />
-        </el-tooltip>
+<!--        <el-tooltip :content="proxy.$t('navbar.document')" effect="dark" placement="bottom">-->
+<!--          <ruo-yi-doc id="ruoyi-doc" class="right-menu-item hover-effect" />-->
+<!--        </el-tooltip>-->
 
         <el-tooltip :content="proxy.$t('navbar.full')" effect="dark" placement="bottom">
           <screenfull id="screenfull" class="right-menu-item hover-effect" />
@@ -93,8 +107,10 @@ import { useAppStore } from '@/store/modules/app';
 import { useUserStore } from '@/store/modules/user';
 import { useSettingsStore } from '@/store/modules/settings';
 import { useNoticeStore } from '@/store/modules/notice';
+import { useImClientStore } from '@/store/modules/imClient';
 import { getTenantList } from '@/api/login';
 import { dynamicClear, dynamicTenant } from '@/api/system/tenant';
+import { listImClient } from '@/api/master/imClient';
 import { TenantVO } from '@/api/types';
 import notice from './notice/index.vue';
 import router from '@/router';
@@ -103,6 +119,7 @@ import { ElMessageBoxOptions } from 'element-plus/es/components/message-box/src/
 const appStore = useAppStore();
 const userStore = useUserStore();
 const settingsStore = useSettingsStore();
+const imClientStore = useImClientStore();
 const noticeStore = storeToRefs(useNoticeStore());
 const newNotice = ref(<number>0);
 
@@ -150,8 +167,30 @@ const initTenantList = async () => {
   }
 };
 
+/** IM平台列表 */
+const initImClientList = async () => {
+  try {
+    const res = await listImClient({ pageNum: 1, pageSize: 1000 });
+    const list = res.rows || [];
+    imClientStore.setImClientList(list);
+    // 只在首次访问（localStorage中没有该key）时默认选中第一条
+    const hasStoredSelection = localStorage.getItem('selectedClientId') !== null;
+    if (!hasStoredSelection && list.length > 0) {
+      imClientStore.setSelectedClientId(list[0].id);
+    }
+  } catch (error) {
+    console.error('获取IM平台列表失败:', error);
+  }
+};
+
+/** IM平台切换 */
+const handleImClientChange = () => {
+  // 切换后首页会自动响应
+};
+
 defineExpose({
-  initTenantList
+  initTenantList,
+  initImClientList
 });
 
 const toggleSideBar = () => {
@@ -198,11 +237,26 @@ watch(
   },
   { deep: true }
 );
+
+// 监听路由变化，到首页时刷新平台列表
+watch(
+  () => router.currentRoute.value.path,
+  (newPath) => {
+    if (newPath === '/index' || newPath === '/') {
+      initImClientList();
+    }
+  }
+);
 </script>
 
 <style lang="scss" scoped>
 :deep(.el-select .el-input__wrapper) {
   height: 30px;
+}
+
+.im-client-select {
+  width: 180px;
+  margin-right: 8px;
 }
 
 :deep(.el-badge__content.is-fixed) {
